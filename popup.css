@@ -1,0 +1,72 @@
+body {
+  font-family: sans-serif;
+  padding: 12px;
+  width: 280px;
+}
+label {
+  font-weight: bold;
+  margin-top: 10px;
+  display: block;
+}
+select,
+input[type="number"],
+button {
+  width: 100%;
+  margin-top: 5px;
+  padding: 6px;
+  box-sizing: border-box;
+}
+input[type="checkbox"] {
+  margin-right: 6px;
+  vertical-align: middle;
+}
+button {
+  margin-top: 15px;
+  font-weight: bold;
+  cursor: pointer;
+  border: none;
+  padding: 10px;
+}
+.primary {
+  background-color: #4caf50;
+  color: white;
+}
+.primary:hover {
+  background-color: #45a049;
+}
+.danger {
+  background-color: #f44336;
+  color: white;
+}
+.danger:hover {
+  background-color: #d32f2f;
+}
+
+.button-row {
+  display: flex;
+  gap: 10px; /* space between buttons */
+  margin-top: 15px;
+}
+
+.button-row button {
+  flex: 1; /* buttons take equal width */
+}
+
+.dropdown {
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  padding: 5px;
+  max-height: 150px;
+  overflow-y: auto;
+  margin-bottom: 10px;
+}
+
+.dropdown-item {
+  padding: 6px 8px;
+  cursor: pointer;
+  border-radius: 3px;
+}
+
+.dropdown-item:hover {
+  background-color: #f0f0f0;
+}

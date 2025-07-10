@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "Coupon Clicker",
+  "version": "1.0",
+  "description": "Tired of adding all those coupons manually? This extension automatically clicks on all available coupons for you.",
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Coupon Clicker"
+  },
+  "permissions": ["scripting", "activeTab"],
+  "host_permissions": ["<all_urls>"],
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

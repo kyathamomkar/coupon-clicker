@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Coupon Clicker</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <h3>Coupon Clicker</h3>
+
+  <label for="buttonDropdown">Eligible Buttons:</label>
+  <!-- <select id="buttonDropdown" size="6" style="width: 100%;"></select> -->
+   <div class="dropdown" id="buttonList"></div>
+
+  <label>
+    <input type="checkbox" id="highlightMatches" disabled />
+    Highlight all matching buttons
+  </label>
+
+  <label for="delayInput">Delay (seconds):</label>
+  <input type="number" id="delayInput" min="1" value="15" />
+
+ <div class="button-row">
+  <button id="startBtn" class="primary" disabled>Start</button>
+  <button id="stopBtn" class="danger" disabled>Stop</button>
+</div>
+
+
+  <div id="status" style="margin-top: 10px; font-size: 13px; color: green;"></div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
