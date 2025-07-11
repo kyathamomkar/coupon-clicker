@@ -1,120 +1,96 @@
 document.addEventListener("DOMContentLoaded", async () => {
-  const dropdown = document.getElementById("buttonDropdown");
-  const delayInput = document.getElementById("delayInput");
-  const highlightAllCheckbox = document.getElementById("highlightAllCheckbox");
-  const startButton = document.getElementById("startButton");
-  const stopButton = document.getElementById("stopButton");
+  const buttonList = document.getElementById("buttonList")
+  const highlightCheckbox = document.getElementById("highlightMatches")
+  const delayInput = document.getElementById("delayInput")
+  const startBtn = document.getElementById("startBtn")
+  const stopBtn = document.getElementById("stopBtn")
+  const status = document.getElementById("status")
 
-  let selectedButton = null;
-  let allButtons = [];
+  let eligibleButtons = []
+  let selectedIndex = -1
 
-  function getStructureChain(root) {
-    if (!root || root.nodeType !== Node.ELEMENT_NODE) return "";
-    function walk(node) {
-      if (node.children.length === 0) return node.tagName.toLowerCase();
-      const children = Array.from(node.children).map(walk);
-      return node.tagName.toLowerCase() + ">" + children.join(">");
-    }
-    return walk(root);
-  }
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
 
-  function getCurrentTab(callback) {
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      callback(tabs[0]);
-    });
-  }
+  // Request eligible buttons once on popup load
+  chrome.tabs.sendMessage(tab.id, { type: "GET_ELIGIBLE_BUTTONS" })
 
-  function requestEligibleButtons(tabId) {
-    chrome.tabs.sendMessage(tabId, { type: "GET_ELIGIBLE_BUTTONS" });
-  }
-
-  function highlightButton(tabId, selector) {
-    chrome.tabs.sendMessage(tabId, {
-      type: "HIGHLIGHT_SINGLE_BUTTON",
-      payload: { selector },
-    });
-  }
-
-  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  // Listen for eligible buttons response
+  chrome.runtime.onMessage.addListener((message) => {
     if (message.type === "ELIGIBLE_BUTTONS") {
-      allButtons = message.payload.buttons;
-      dropdown.innerHTML = "";
-
-      allButtons.forEach((btn, idx) => {
-        const option = document.createElement("option");
-        option.value = btn.uniqueSelector;
-        option.textContent = `${btn.text} — ${btn.tagName}`;
-        option.dataset.index = idx;
-        dropdown.appendChild(option);
-      });
-
-      dropdown.disabled = false;
+      eligibleButtons = message.payload.buttons
+      renderButtonList()
+      const hasButtons = eligibleButtons.length > 0
+      highlightCheckbox.disabled = !hasButtons
+      startBtn.disabled = !hasButtons
+      stopBtn.disabled = !hasButtons
+      status.textContent = hasButtons
+        ? `${eligibleButtons.length} buttons found.`
+        : "No eligible buttons found."
     }
-  });
+  })
 
-  dropdown.addEventListener("change", () => {
-    const selectedIdx = dropdown.options[dropdown.selectedIndex].dataset.index;
-    selectedButton = allButtons[selectedIdx];
-    getCurrentTab((tab) => {
-      highlightButton(tab.id, selectedButton.uniqueSelector);
-    });
-    highlightAllCheckbox.disabled = false;
-  });
-
-  highlightAllCheckbox.addEventListener("change", () => {
-    if (!selectedButton) return;
-    getCurrentTab((tab) => {
-      chrome.tabs.sendMessage(tab.id, {
-        type: "TOGGLE_HIGHLIGHT_ALL",
-        payload: {
-          highlightAll: highlightAllCheckbox.checked,
-        },
-      });
-    });
-  });
-
-  startButton.addEventListener("click", () => {
-    if (!selectedButton) return;
-    const delay = parseFloat(delayInput.value) || 5;
-
-    getCurrentTab((tab) => {
-      chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        func: (selector) => {
-          function getElementByXPath(xpath) {
-            return document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
-          }
-          const el = getElementByXPath(selector);
-          return el ? (function getStructureChain(root) {
-            if (!root || root.nodeType !== Node.ELEMENT_NODE) return "";
-            function walk(node) {
-              if (node.children.length === 0) return node.tagName.toLowerCase();
-              const children = Array.from(node.children).map(walk);
-              return node.tagName.toLowerCase() + ">" + children.join(">");
-            }
-            return walk(root);
-          })(el) : null;
-        },
-        args: [selectedButton.uniqueSelector],
-      }, (results) => {
-        const structureSignature = results[0].result;
+  function renderButtonList() {
+    buttonList.innerHTML = ""
+    eligibleButtons.forEach((btn, idx) => {
+      const item = document.createElement("div")
+      item.className = "dropdown-item"
+      item.textContent = btn.text || "(no text)"
+      item.addEventListener("mouseover", () => {
         chrome.tabs.sendMessage(tab.id, {
-          type: "START_ACTION",
+          type: "HIGHLIGHT_SINGLE_BUTTON",
+          payload: { selectedButton: btn }
+        })
+      })
+      item.addEventListener("click", () => {
+        selectedIndex = idx
+        document
+          .querySelectorAll(".dropdown-item")
+          .forEach((el) => el.classList.remove("selected"))
+        item.classList.add("selected")
+        highlightCheckbox.disabled = false
+        chrome.tabs.sendMessage(tab.id, {
+          type: "BUTTON_OPTION_CLICK",
           payload: {
-            structureSignature,
-            delay,
-            highlightAll: highlightAllCheckbox.checked,
-          },
-        });
-      });
-    });
-  });
+            selectedButton: btn,
+            highlightAll: highlightCheckbox.checked
+          }
+        })
+      })
+      buttonList.appendChild(item)
+    })
+  }
 
-  stopButton.addEventListener("click", () => {
-    getCurrentTab((tab) => {
-      chrome.tabs.sendMessage(tab.id, { type: "STOP_ACTION" });
-    });
-  });
+  startBtn.addEventListener("click", () => {
+    if (selectedIndex === -1) {
+      status.textContent = "Please select a button first."
+      return
+    }
+    const delay = parseInt(delayInput.value, 10)
+    const highlightAll = highlightCheckbox.checked
+    const selectedButton = eligibleButtons[selectedIndex]
 
-  getCurrentTab((tab) => requestEligibleButtons(tab.id));
-});
+    chrome.tabs.sendMessage(tab.id, {
+      type: "START_ACTION",
+      payload: {
+        selectedButtonSelector: selectedButton.xPath,
+        delay,
+        highlightAll
+      }
+    })
+
+    status.textContent = "Started clicking."
+  })
+
+  stopBtn.addEventListener("click", () => {
+    chrome.tabs.sendMessage(tab.id, { type: "STOP_ACTION" })
+    status.textContent = "Stopped clicking."
+  })
+
+  highlightCheckbox.addEventListener("change", () => {
+    const highlightAll = highlightCheckbox.checked
+    chrome.tabs.sendMessage(tab.id, {
+      type: "TOGGLE_HIGHLIGHT_ALL",
+      payload: { highlightAll }
+    })
+  })
+})

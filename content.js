@@ -2,7 +2,7 @@
   let highlightOverlay = null
   let highlightAllElements = []
   let intervalId = null
-  let currentStructureSignature = null
+  let currentSelectedButton = null
 
   function getXPath(el) {
     if (el.id) return `//*[@id='${el.id}']`
@@ -40,19 +40,21 @@
     )
     return allElements.map((el) => ({
       text: el.textContent?.trim() || el.value || "(no text)",
-      uniqueSelector: getXPath(el),
-      tagName: el.tagName,
-      classList: Array.from(el.classList)
+      xPath: getXPath(el),
+      signature: getStructureChain(el),
+      domElement: el
     }))
   }
 
-  function findMatchingButtonsByStructure(signature) {
+  function findMatchingButtons() {
     const allElements = Array.from(
       document.querySelectorAll(
         'button, input[type="button"], input[type="submit"]'
       )
     )
-    return allElements.filter((el) => getStructureChain(el) === signature)
+    return allElements.filter(
+      (el) => getStructureChain(el) === currentSelectedButton.signature
+    )
   }
 
   function clearHighlight() {
@@ -92,8 +94,10 @@
     highlightAllElements = []
   }
 
-  function highlightAllButtons(buttons) {
+  function highlightAllButtons() {
     clearAllHighlights()
+    const buttons = findMatchingButtons()
+    if (buttons.length === 0) return
     highlightAllElements = []
 
     buttons.forEach((el) => {
@@ -113,17 +117,18 @@
     })
   }
 
-  function startClicking(structureSignature, delay, highlightAllToggle) {
+  function startClicking(referenceSelector, delay, highlightAllToggle) {
     if (intervalId) clearInterval(intervalId)
 
-    currentStructureSignature = structureSignature
-    const buttons = findMatchingButtonsByStructure(structureSignature)
+    const buttons = findMatchingButtons()
     if (buttons.length === 0) return
 
-    if (highlightAllToggle) highlightAllButtons(buttons)
+    if (highlightAllToggle) highlightAllButtons()
     else clearAllHighlights()
 
-    let index = 0
+    let index = buttons.findIndex((el) => el.matches(referenceSelector))
+    if (index === -1) index = 0
+
     intervalId = setInterval(() => {
       if (index >= buttons.length) {
         clearInterval(intervalId)
@@ -155,23 +160,26 @@
         payload: { buttons }
       })
     } else if (type === "HIGHLIGHT_SINGLE_BUTTON") {
-      highlightButton(payload.selector)
+      highlightButton(payload.selectedButton.xPath)
     } else if (type === "START_ACTION") {
       startClicking(
-        payload.structureSignature,
+        payload.selectedButtonSelector,
         payload.delay,
         payload.highlightAll
       )
     } else if (type === "STOP_ACTION") {
       stopClicking()
+    } else if (type === "BUTTON_OPTION_CLICK") {
+      const { selectedButton, highlightAll } = payload
+      currentSelectedButton = selectedButton
+      if (highlightAll) {
+        highlightAllButtons()
+      } else {
+        clearAllHighlights()
+      }
     } else if (type === "TOGGLE_HIGHLIGHT_ALL") {
-      if (!currentStructureSignature) return
-
       if (payload.highlightAll) {
-        const buttons = findMatchingButtonsByStructure(
-          currentStructureSignature
-        )
-        highlightAllButtons(buttons)
+        highlightAllButtons()
       } else {
         clearAllHighlights()
       }
