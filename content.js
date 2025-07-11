@@ -2,28 +2,34 @@
   let highlightOverlay = null
   let highlightAllElements = []
   let intervalId = null
-  let currentReferenceSelector = null
+  let currentStructureSignature = null
 
-  function getUniqueSelector(el) {
-    if (!el) return null
-    if (el.id) return `#${el.id}`
-    let path = []
+  function getXPath(el) {
+    if (el.id) return `//*[@id='${el.id}']`
+    const parts = []
     while (el && el.nodeType === Node.ELEMENT_NODE) {
-      let selector = el.nodeName.toLowerCase()
-      if (el.className) {
-        const classes = el.className.trim().split(/\s+/).join(".")
-        if (classes) selector += `.${classes}`
+      let index = 1
+      let sibling = el.previousElementSibling
+      while (sibling) {
+        if (sibling.nodeName === el.nodeName) index++
+        sibling = sibling.previousElementSibling
       }
-      let sibling = el
-      let nth = 1
-      while ((sibling = sibling.previousElementSibling)) {
-        if (sibling.nodeName.toLowerCase() === el.nodeName.toLowerCase()) nth++
-      }
-      selector += `:nth-of-type(${nth})`
-      path.unshift(selector)
+      parts.unshift(`${el.nodeName.toLowerCase()}[${index}]`)
       el = el.parentElement
     }
-    return path.join(" > ")
+    return "//" + parts.join("/")
+  }
+
+  function getStructureChain(root) {
+    if (!root || root.nodeType !== Node.ELEMENT_NODE) return ""
+
+    function walk(node) {
+      if (node.children.length === 0) return node.tagName.toLowerCase()
+      const children = Array.from(node.children).map(walk)
+      return node.tagName.toLowerCase() + ">" + children.join(">")
+    }
+
+    return walk(root)
   }
 
   function findEligibleButtons() {
@@ -34,34 +40,19 @@
     )
     return allElements.map((el) => ({
       text: el.textContent?.trim() || el.value || "(no text)",
-      uniqueSelector: getUniqueSelector(el),
+      uniqueSelector: getXPath(el),
       tagName: el.tagName,
       classList: Array.from(el.classList)
     }))
   }
 
-  function buttonsMatch(el, reference) {
-    if (!el || !reference) return false
-    if (el.tagName !== reference.tagName) return false
-
-    const elText = el.textContent?.trim() || el.value || ""
-    const refText = reference.textContent?.trim() || reference.value || ""
-    if (elText !== refText) return false
-
-    const elClasses = Array.from(el.classList)
-    const refClasses = reference.classList || []
-    const commonClass = refClasses.some((c) => elClasses.includes(c))
-    if (!commonClass) return false
-
-    return true
-  }
-
-  function findMatchingButtons(referenceSelector) {
-    const reference = document.querySelector(referenceSelector)
-    if (!reference) return []
-
-    const candidates = Array.from(document.querySelectorAll(reference.tagName))
-    return candidates.filter((el) => buttonsMatch(el, reference))
+  function findMatchingButtonsByStructure(signature) {
+    const allElements = Array.from(
+      document.querySelectorAll(
+        'button, input[type="button"], input[type="submit"]'
+      )
+    )
+    return allElements.filter((el) => getStructureChain(el) === signature)
   }
 
   function clearHighlight() {
@@ -71,9 +62,15 @@
     }
   }
 
-  function highlightButton(selector) {
+  function highlightButton(xpath) {
     clearHighlight()
-    const el = document.querySelector(selector)
+    const el = document.evaluate(
+      xpath,
+      document,
+      null,
+      XPathResult.FIRST_ORDERED_NODE_TYPE,
+      null
+    ).singleNodeValue
     if (!el) return
 
     const rect = el.getBoundingClientRect()
@@ -116,19 +113,17 @@
     })
   }
 
-  function startClicking(referenceSelector, delay, highlightAllToggle) {
+  function startClicking(structureSignature, delay, highlightAllToggle) {
     if (intervalId) clearInterval(intervalId)
 
-    currentReferenceSelector = referenceSelector
-    const buttons = findMatchingButtons(referenceSelector)
+    currentStructureSignature = structureSignature
+    const buttons = findMatchingButtonsByStructure(structureSignature)
     if (buttons.length === 0) return
 
     if (highlightAllToggle) highlightAllButtons(buttons)
     else clearAllHighlights()
 
-    let index = buttons.findIndex((el) => el.matches(referenceSelector))
-    if (index === -1) index = 0
-
+    let index = 0
     intervalId = setInterval(() => {
       if (index >= buttons.length) {
         clearInterval(intervalId)
@@ -163,17 +158,19 @@
       highlightButton(payload.selector)
     } else if (type === "START_ACTION") {
       startClicking(
-        payload.selectedButtonSelector,
+        payload.structureSignature,
         payload.delay,
         payload.highlightAll
       )
     } else if (type === "STOP_ACTION") {
       stopClicking()
     } else if (type === "TOGGLE_HIGHLIGHT_ALL") {
-      if (!currentReferenceSelector) return
+      if (!currentStructureSignature) return
 
       if (payload.highlightAll) {
-        const buttons = findMatchingButtons(currentReferenceSelector)
+        const buttons = findMatchingButtonsByStructure(
+          currentStructureSignature
+        )
         highlightAllButtons(buttons)
       } else {
         clearAllHighlights()
